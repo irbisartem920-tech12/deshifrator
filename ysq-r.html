@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>YSQ-R — ручной ввод результатов</title>
+<style>
+  :root {
+    --bg: #f6f5f3;
+    --surface: #ffffff;
+    --text: #2c2c2e;
+    --text-muted: #6b6b6f;
+    --border: #dedcd8;
+    --accent: #5b6b73;
+    --accent-soft: #e7ebec;
+    --accent-dark: #3f4d54;
+    --danger: #b2503b;
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.5;
+    -webkit-text-size-adjust: 100%;
+  }
+  #app {
+    min-height: 100vh;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 24px 16px 48px;
+  }
+  .card {
+    width: 100%;
+    max-width: 720px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 28px 24px;
+    margin-top: 16px;
+  }
+  h1 { font-size: 1.3rem; margin: 0 0 4px; font-weight: 600; }
+  h2 { font-size: 1.05rem; margin: 0 0 10px; font-weight: 600; }
+  p { margin: 0 0 12px; }
+  .muted { color: var(--text-muted); font-size: 0.92rem; }
+  label { display: block; font-size: 0.9rem; color: var(--text-muted); margin-bottom: 6px; margin-top: 16px; }
+  input[type="text"], input[type="number"] {
+    width: 100%;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 1rem;
+    background: #fff;
+    color: var(--text);
+  }
+  input[type="text"]:focus, input[type="number"]:focus { outline: none; border-color: var(--accent); }
+  .input-row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .input-row > div { flex: 1 1 140px; }
+  textarea.paste-box {
+    width: 100%;
+    min-height: 220px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.85rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    color: var(--text);
+    background: #fbfbfa;
+    resize: vertical;
+    margin-top: 16px;
+  }
+  .btn-row { display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap; }
+  button {
+    font-family: inherit;
+    font-size: 1rem;
+    padding: 13px 20px;
+    border-radius: 8px;
+    border: 1px solid var(--accent);
+    background: var(--accent);
+    color: #fff;
+    cursor: pointer;
+    min-height: 48px;
+    flex: 1 1 auto;
+  }
+  button.secondary { background: var(--surface); color: var(--accent-dark); border: 1px solid var(--border); }
+  button:not(:disabled):active { transform: translateY(1px); }
+  .notice {
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 0.86rem;
+    margin-top: 14px;
+  }
+  .notice.warn { background: #fbeee9; color: var(--danger); border: 1px solid #e7c9bd; }
+  .notice.ok { background: var(--accent-soft); color: var(--accent-dark); border: 1px solid var(--border); }
+  .scale-desc { font-size: 0.82rem; color: var(--text-muted); margin: 3px 0 0; font-weight: 400; }
+  .table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin-bottom: 22px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+  table.results-table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+  .results-table th, .results-table td {
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+    vertical-align: top;
+  }
+  .results-table tbody tr:last-child td { border-bottom: none; }
+  .results-table th {
+    color: var(--text-muted);
+    font-weight: 600;
+    font-size: 0.76rem;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    background: var(--accent-soft);
+  }
+  .results-table td.num { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .results-table td.name-cell { min-width: 200px; }
+  .status-elevated { color: var(--danger); font-weight: 600; white-space: nowrap; }
+  .status-normal { color: var(--text-muted); white-space: nowrap; }
+  .chart-card { border: 1px solid var(--border); border-radius: 10px; padding: 16px 14px 4px; margin-bottom: 18px; }
+  .chart-title { font-weight: 600; font-size: 0.94rem; margin-bottom: 8px; }
+  svg.linechart { width: 100%; height: auto; display: block; }
+  textarea.report-preview {
+    width: 100%;
+    min-height: 160px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.82rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    color: var(--text-muted);
+    background: #fbfbfa;
+    resize: vertical;
+  }
+  .toast {
+    position: fixed;
+    left: 50%;
+    bottom: 24px;
+    transform: translateX(-50%);
+    background: var(--accent-dark);
+    color: #fff;
+    padding: 10px 18px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+    z-index: 10;
+  }
+  .toast.show { opacity: 1; }
+  #screen-results { display: none; }
+  #screen-results.active { display: block; }
+  @media (max-width: 480px) {
+    .card { padding: 22px 16px; }
+    .btn-row { flex-direction: column; }
+    .btn-row button { width: 100%; }
+  }
+  @media print {
+    body * { visibility: hidden; }
+    #screen-results, #screen-results * { visibility: visible; }
+    #screen-results {
+      position: absolute;
+      left: 0; top: 0;
+      width: 100%;
+      max-width: 100%;
+      border: none;
+      padding: 0;
+      margin: 0;
+    }
+    .no-print { display: none !important; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div class="card" id="screen-input">
+    <h1>YSQ-R — ручной ввод готовых результатов</h1>
+    <p class="muted">Вставьте сюда либо весь текст, скопированный из веб-опросника кнопкой «Скопировать результаты для психолога», либо просто список чисел от 1 до 6 — по одному ответу на строку (или через запятую/пробел), по порядку вопросов 1–116. Расчёт шкал, таблица и графики построятся автоматически.</p>
+
+    <div class="input-row">
+      <div>
+        <label for="input-name">Имя (необязательно)</label>
+        <input type="text" id="input-name" autocomplete="off" placeholder="Имя">
+      </div>
+      <div>
+        <label for="input-age">Возраст (необязательно)</label>
+        <input type="number" id="input-age" min="1" max="120" placeholder="Возраст">
+      </div>
+    </div>
+
+    <label for="paste-box">Ответы (готовый текст отчёта или список чисел)</label>
+    <textarea class="paste-box" id="paste-box" placeholder="Например:&#10;5&#10;6&#10;4&#10;4&#10;5&#10;...&#10;&#10;или вставьте целиком скопированный отчёт из опросника"></textarea>
+
+    <div id="parse-notice"></div>
+
+    <div class="btn-row">
+      <button id="btn-compute">Показать результаты</button>
+      <button class="secondary" id="btn-clear">Очистить</button>
+    </div>
+  </div>
+
+  <div class="card" id="screen-results">
+    <h1>Результаты</h1>
+    <p class="muted" id="results-meta"></p>
+    <div id="parse-notice-2"></div>
+    <p class="muted">Таблица с баллами по каждой шкале и два графика: доля утверждений с высокими оценками (5-6) и средний балл (от 1 до 6). Это не диагноз — обсудите результаты с вашим психологом.</p>
+    <div id="scales-container"></div>
+    <div class="btn-row no-print">
+      <button id="btn-pdf">Скачать PDF / распечатать</button>
+    </div>
+    <div class="btn-row no-print">
+      <button id="btn-copy">Скопировать результаты для психолога</button>
+    </div>
+    <div class="btn-row no-print">
+      <button class="secondary" id="btn-download">Скачать результаты (.txt)</button>
+    </div>
+    <label class="no-print" for="report-preview">Текст результатов</label>
+    <textarea class="report-preview no-print" id="report-preview" readonly></textarea>
+    <div class="btn-row no-print">
+      <button class="secondary" id="btn-back-to-input">Ввести другие данные</button>
+    </div>
+  </div>
+
+</div>
+<div class="toast" id="toast"></div>
+
+<script id="ysq-scales" type="application/json">[{"code": "ЭД", "name": "Эмоциональная депривация", "desc": "Ощущение, что базовая потребность в заботе, поддержке и понимании остаётся неудовлетворённой.", "items": [1, 2, 3, 4, 5]}, {"code": "ПН", "name": "Покинутость / Нестабильность", "desc": "Ожидание, что близкие отношения нестабильны и закончатся потерей значимого человека.", "items": [6, 7, 8, 9, 10, 11, 12, 13]}, {"code": "НЖ", "name": "Недоверие / Ожидание жестокого обращения", "desc": "Ожидание, что другие могут обмануть, использовать или причинить боль.", "items": [14, 15, 16, 17, 18]}, {"code": "СО", "name": "Социальная отчуждённость", "desc": "Ощущение непохожести на других и невключённости в круг общения.", "items": [19, 20, 21, 22, 23]}, {"code": "ДС", "name": "Дефективность / Стыд", "desc": "Убеждение в собственной неполноценности или недостойности любви.", "items": [24, 25, 26, 27, 28, 29]}, {"code": "НУ", "name": "Неуспешность", "desc": "Ожидание неудачи или ощущение, что менее способен, чем другие.", "items": [30, 31, 32, 33, 34, 35]}, {"code": "ЗБ", "name": "Зависимость / Беспомощность", "desc": "Ощущение неспособности справляться с повседневными задачами самостоятельно.", "items": [36, 37, 38, 39, 40, 41, 42, 43]}, {"code": "УЯ", "name": "Уязвимость", "desc": "Ожидание, что в любой момент может произойти катастрофа или несчастье.", "items": [44, 45, 46, 47, 48, 49]}, {"code": "СН", "name": "Спутанность / Неразвитая идентичность", "desc": "Чрезмерная эмоциональная слитность с близкими в ущерб собственной автономии.", "items": [50, 51, 52, 53, 54, 55, 56]}, {"code": "ПК", "name": "Покорность", "desc": "Чрезмерное подчинение своих потребностей другим из страха наказания или отвержения.", "items": [57, 58, 59, 60, 61]}, {"code": "СЖ", "name": "Самопожертвование", "desc": "Чрезмерная ориентация на нужды других в ущерб собственным.", "items": [62, 63, 64, 65, 66, 67]}, {"code": "СПК", "name": "Страх потери контроля над эмоциями", "desc": "Опасение, что потеря контроля над эмоциями или импульсами приведёт к тяжёлым последствиям.", "items": [68, 69, 70, 71]}, {"code": "ЭС", "name": "Эмоциональная скованность", "desc": "Чрезмерное сдерживание эмоций из-за стыда или смущения.", "items": [72, 73, 74, 75, 76]}, {"code": "ЖС", "name": "Жёсткие стандарты / Придирчивость", "desc": "Убеждение, что нужно соответствовать очень высоким внутренним стандартам, иначе последует критика.", "items": [77, 78, 79, 80, 81, 82, 83]}, {"code": "ПГ", "name": "Привилегированность / Грандиозность", "desc": "Ощущение превосходства и права на особые привилегии.", "items": [84, 85, 86, 87, 88, 89]}, {"code": "НС", "name": "Недостаточность самоконтроля", "desc": "Трудности с самодисциплиной, терпимостью к фрустрации и контролем импульсов.", "items": [90, 91, 92, 93, 94, 95, 96]}, {"code": "ПО", "name": "Поиск одобрения", "desc": "Чрезмерная ориентация на внимание, признание и одобрение окружающих.", "items": [97, 98, 99, 100, 101]}, {"code": "НП", "name": "Негативизм / Пессимизм", "desc": "Устойчивый фокус на негативных сторонах жизни при недооценке позитивных.", "items": [102, 103, 104, 105, 106, 107]}, {"code": "ПС", "name": "Пунитивность (направленная на себя)", "desc": "Убеждение, что сам заслуживает наказания за ошибки и несовершенства.", "items": [108, 109, 110, 111, 112]}, {"code": "ПД", "name": "Пунитивность (направленная на других)", "desc": "Убеждение, что другие заслуживают наказания за ошибки и несовершенства.", "items": [113, 114, 115, 116]}]</script>
+<script>
+(function () {
+  "use strict";
+
+  var SCALES = JSON.parse(document.getElementById('ysq-scales').textContent);
+  var TOTAL = 116;
+  var lastScores = null;
+  var lastMeta = { name: '', age: '', warning: '' };
+
+  function $(id) { return document.getElementById(id); }
+
+  function showScreen(id) {
+    $('screen-input').classList.remove('active');
+    $('screen-results').classList.remove('active');
+    $(id).classList.add('active');
+    if (id === 'screen-input') { $('screen-input').style.display = 'block'; $('screen-results').style.display = 'none'; }
+    else { $('screen-input').style.display = 'none'; $('screen-results').style.display = 'block'; }
+    window.scrollTo(0, 0);
+  }
+  $('screen-input').classList.add('active');
+  $('screen-input').style.display = 'block';
+
+  // ---------- PARSING ----------
+  function parseAnswers(raw) {
+    var answers = {};
+    var text = (raw || '').trim();
+    var name = '', age = '';
+
+    var nameMatch = text.match(/Имя:\s*(.+)/);
+    if (nameMatch) name = nameMatch[1].trim();
+    var ageMatch = text.match(/Возраст:\s*(\d+)/);
+    if (ageMatch) age = ageMatch[1].trim();
+
+    if (/Ответы по вопросам/.test(text)) {
+      // Take only the answers list itself — it ends at the first blank line,
+      // before the "Итоговые баллы по шкалам" section. Without this cut, scale
+      // averages like "3.50/6" get misread as "вопрос 3 = 5".
+      var section = (text.split(/Ответы по вопросам:?/)[1] || '').split(/\n[ \t]*\n/)[0];
+      var re = /(\d{1,3})\.\s*([1-6])(?![\d.,])/g;
+      var m;
+      while ((m = re.exec(section)) !== null) {
+        var qnum = Number(m[1]);
+        if (qnum >= 1 && qnum <= TOTAL) {
+          answers[qnum] = Number(m[2]);
+        }
+      }
+    } else {
+      var tokens = text.split(/[\s,;]+/).filter(function (t) { return /^[1-6]$/.test(t); });
+      for (var i = 0; i < tokens.length && i < TOTAL; i++) {
+        answers[i + 1] = Number(tokens[i]);
+      }
+    }
+
+    return { answers: answers, name: name, age: age };
+  }
+
+  // ---------- SCORING ----------
+  function computeScores(answers) {
+    return SCALES.map(function (scale) {
+      var sum = 0, count56 = 0, count456 = 0, n = 0;
+      for (var i = 0; i < scale.items.length; i++) {
+        var raw = answers[scale.items[i]];
+        if (raw === undefined) continue;
+        var v = Number(raw);
+        if (!v) continue;
+        sum += v;
+        n++;
+        if (v > 4) count56++;
+        if (v > 3) count456++;
+      }
+      var avg = n ? sum / n : null;
+      var pct56 = n ? count56 / n : null;
+      var pct456 = n ? count456 / n : null;
+      var elevated = pct56 !== null && pct56 >= 0.5;
+      return {
+        code: scale.code, name: scale.name, desc: scale.desc,
+        score: avg, pct56: pct56, pct456: pct456, elevated: elevated,
+        answeredCount: n, totalCount: scale.items.length
+      };
+    });
+  }
+
+  // ---------- CHARTS + TABLE ----------
+  function svgLineChart(cfg) {
+    var W = 720, H = 560;
+    var padL = 34, padR = 12, padT = 14, padB = 320;
+    var innerW = W - padL - padR;
+    var innerH = H - padT - padB;
+    var n = cfg.labels.length;
+    var xStep = (n > 1) ? innerW / (n - 1) : 0;
+    function X(i) { return padL + i * xStep; }
+    function Y(v) { return padT + innerH - ((v - cfg.min) / (cfg.max - cfg.min)) * innerH; }
+
+    var gridLines = '', gridLabels = '';
+    for (var g = cfg.min; g <= cfg.max + 0.0001; g += cfg.gridStep) {
+      var y = Y(g);
+      gridLines += '<line x1="' + padL + '" y1="' + y + '" x2="' + (W - padR) + '" y2="' + y + '" stroke="var(--border)" stroke-width="1"/>';
+      gridLabels += '<text x="' + (padL - 6) + '" y="' + (y + 3) + '" font-size="9" text-anchor="end" fill="var(--text-muted)">' + Math.round(g) + (cfg.valueSuffix || '') + '</text>';
+    }
+
+    var thresholdLine = '';
+    if (cfg.thresholdValue !== undefined) {
+      var ty = Y(cfg.thresholdValue);
+      thresholdLine = '<line x1="' + padL + '" y1="' + ty + '" x2="' + (W - padR) + '" y2="' + ty + '" stroke="var(--danger)" stroke-width="1.2" stroke-dasharray="4 3"/>';
+    }
+
+    var segments = [], circles = '', xlabels = '';
+    var axisY = H - padB;
+    var pendingStart = null;
+    for (var i = 0; i < n; i++) {
+      var x = X(i);
+      if (cfg.values[i] === null) {
+        pendingStart = null;
+      } else {
+        var y = Y(cfg.values[i]);
+        if (pendingStart === null) { segments.push('M' + x + ',' + y); }
+        else { segments.push('L' + x + ',' + y); }
+        pendingStart = true;
+        circles += '<circle cx="' + x + '" cy="' + y + '" r="3.4" fill="var(--accent-dark)" />';
+      }
+      xlabels += '<line x1="' + x + '" y1="' + axisY + '" x2="' + x + '" y2="' + (axisY + 4) + '" stroke="var(--text-muted)" stroke-width="1"/>' +
+        '<text x="' + x + '" y="' + (axisY + 9) + '" font-size="10" text-anchor="start" fill="var(--text-muted)" transform="rotate(90 ' + x + ' ' + (axisY + 9) + ')">' + cfg.labels[i] + '</text>';
+    }
+
+    return '<svg class="linechart" viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg">' +
+      gridLines + gridLabels + thresholdLine +
+      '<path d="' + segments.join(' ') + '" fill="none" stroke="var(--accent)" stroke-width="2.2"/>' +
+      circles + xlabels +
+      '</svg>';
+  }
+
+  function buildResultsHTML(scores) {
+    var labels = scores.map(function (s) { return s.name; });
+    var avgValues = scores.map(function (s) { return s.score === null ? null : s.score; });
+    var pctValues = scores.map(function (s) { return s.pct56 === null ? null : Math.round(s.pct56 * 100); });
+
+    var rows = scores.map(function (s) {
+      var scoreText = s.score === null ? '—' : s.score.toFixed(2);
+      var pct56Text = s.pct56 === null ? '—' : Math.round(s.pct56 * 100) + '%';
+      var pct456Text = s.pct456 === null ? '—' : Math.round(s.pct456 * 100) + '%';
+      var statusText = s.score === null ? '—' : (s.elevated ? 'Повышено' : 'Не повышено');
+      var statusClass = s.score === null ? 'status-normal' : (s.elevated ? 'status-elevated' : 'status-normal');
+      var incompleteNote = (s.answeredCount < s.totalCount) ? ' <span class="muted">(' + s.answeredCount + '/' + s.totalCount + ' отвечено)</span>' : '';
+      return '<tr>' +
+        '<td class="name-cell"><b>' + s.code + '</b> — ' + s.name + incompleteNote + '<div class="scale-desc">' + s.desc + '</div></td>' +
+        '<td class="num">' + scoreText + '</td>' +
+        '<td class="num">' + pct56Text + '</td>' +
+        '<td class="num">' + pct456Text + '</td>' +
+        '<td class="' + statusClass + '">' + statusText + '</td>' +
+        '</tr>';
+    }).join('');
+
+    var tableHtml = '<div class="table-wrap"><table class="results-table">' +
+      '<thead><tr><th>Шкала</th><th>Ср. балл</th><th>% 5–6</th><th>% 4–6</th><th>Статус</th></tr></thead>' +
+      '<tbody>' + rows + '</tbody></table></div>';
+
+    var pctChart = '<div class="chart-card"><div class="chart-title">График по максимальным величинам — доля оценок 5–6 по каждой шкале (%)</div>' +
+      svgLineChart({ labels: labels, values: pctValues, min: 0, max: 100, gridStep: 25, valueSuffix: '%', thresholdValue: 50 }) +
+      '</div>';
+
+    var avgChart = '<div class="chart-card"><div class="chart-title">График по средним значениям — средний балл по каждой шкале (1–6)</div>' +
+      svgLineChart({ labels: labels, values: avgValues, min: 1, max: 6, gridStep: 1 }) +
+      '</div>';
+
+    return tableHtml + pctChart + avgChart;
+  }
+
+  function formatDate() {
+    var d = new Date();
+    var dd = String(d.getDate()).padStart(2, '0');
+    var mm = String(d.getMonth() + 1).padStart(2, '0');
+    return dd + '.' + mm + '.' + d.getFullYear();
+  }
+
+  function buildReportText(scores, meta) {
+    var lines = [];
+    lines.push('Результаты опросника YSQ-R (Young Schema Questionnaire - Revised)');
+    lines.push('Имя: ' + (meta.name || '—'));
+    lines.push('Возраст: ' + (meta.age || '—'));
+    lines.push('Дата расчёта: ' + formatDate());
+    lines.push('Источник: ручной ввод готовых результатов');
+    lines.push('');
+    lines.push('Итоговые баллы по шкалам (среднее по пунктам шкалы, диапазон 1-6).');
+    lines.push('% выс. (5-6) и % (4-5-6) — доля пунктов шкалы с высокими баллами.');
+    lines.push('Официальный критерий (по методике): схема считается повышенной,');
+    lines.push('если 50% или более её пунктов получили оценку 5 или 6.');
+    lines.push('');
+    scores.forEach(function (s) {
+      if (s.score === null) {
+        lines.push(s.name + ' (' + s.code + '): нет данных');
+        return;
+      }
+      lines.push(s.name + ' (' + s.code + '): ' + s.score.toFixed(2) + '/6' +
+        '  [% 5-6: ' + Math.round(s.pct56 * 100) + '% · % 4-5-6: ' + Math.round(s.pct456 * 100) + '%]' +
+        '  — ' + (s.elevated ? 'Повышено' : 'Не повышено'));
+    });
+    return lines.join('\n');
+  }
+
+  // ---------- UI ----------
+  $('btn-compute').addEventListener('click', function () {
+    var raw = $('paste-box').value;
+    var parsed = parseAnswers(raw);
+    var count = Object.keys(parsed.answers).length;
+
+    if (count === 0) {
+      $('parse-notice').innerHTML = '<div class="notice warn">Не удалось найти ни одного числа от 1 до 6 во вставленном тексте. Проверьте формат ввода.</div>';
+      return;
+    }
+
+    var name = $('input-name').value.trim() || parsed.name;
+    var age = $('input-age').value.trim() || parsed.age;
+    var warning = '';
+    if (count < TOTAL) {
+      warning = 'Найдено ' + count + ' из ' + TOTAL + ' ответов. Шкалы с недостающими данными посчитаны только по отвеченным пунктам и помечены в таблице.';
+    }
+    lastMeta = { name: name, age: age, warning: warning };
+
+    var scores = computeScores(parsed.answers);
+    lastScores = scores;
+
+    $('results-meta').textContent = (name || 'Без имени') + (age ? (' · возраст ' + age) : '') + ' · ' + formatDate();
+    $('parse-notice-2').innerHTML = warning ? '<div class="notice warn">' + warning + '</div>' : '<div class="notice ok">Найдено 116 из 116 ответов — данные полные.</div>';
+    $('scales-container').innerHTML = buildResultsHTML(scores);
+
+    var reportText = buildReportText(scores, lastMeta);
+    $('report-preview').value = reportText;
+
+    $('btn-copy').onclick = function () { copyText(reportText); };
+    $('btn-download').onclick = function () {
+      downloadText(reportText, 'YSQ-R_' + (name || 'результат').replace(/[^\wа-яА-ЯёЁ\-]+/g, '_') + '_' + formatDate().replace(/\./g, '-') + '.txt');
+    };
+    $('btn-pdf').onclick = function () {
+      window.print();
+    };
+
+    showScreen('screen-results');
+  });
+
+  $('btn-clear').addEventListener('click', function () {
+    $('paste-box').value = '';
+    $('input-name').value = '';
+    $('input-age').value = '';
+    $('parse-notice').innerHTML = '';
+  });
+
+  $('btn-back-to-input').addEventListener('click', function () {
+    showScreen('screen-input');
+  });
+
+  function showToast(msg) {
+    var t = $('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(function () { t.classList.remove('show'); }, 2200);
+  }
+
+  function copyText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () {
+        showToast('Скопировано в буфер обмена');
+      }).catch(function () { fallbackCopy(text); });
+    } else {
+      fallbackCopy(text);
+    }
+  }
+
+  function fallbackCopy(text) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    try {
+      document.execCommand('copy');
+      showToast('Скопировано в буфер обмена');
+    } catch (e) {
+      showToast('Не удалось скопировать — выделите текст вручную');
+    }
+    document.body.removeChild(ta);
+  }
+
+  function downloadText(text, filename) {
+    var blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  }
+})();
+</script>
+</body>
+</html>

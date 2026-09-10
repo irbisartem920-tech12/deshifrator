@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>SMI — визуализация результатов клиента</title>
+<style>
+  :root {
+    --bg: #f6f5f3;
+    --surface: #ffffff;
+    --text: #2c2c2e;
+    --text-muted: #6b6b6f;
+    --border: #dedcd8;
+    --accent: #5b6b73;
+    --accent-soft: #e7ebec;
+    --accent-dark: #3f4d54;
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.5;
+    -webkit-text-size-adjust: 100%;
+  }
+  #app {
+    min-height: 100vh;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 24px 16px 48px;
+  }
+  .card {
+    width: 100%;
+    max-width: 640px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 28px 24px;
+    margin-top: 16px;
+  }
+  h1 { font-size: 1.35rem; margin: 0 0 4px; font-weight: 600; }
+  h2 { font-size: 1.05rem; margin: 24px 0 10px; font-weight: 600; }
+  p { margin: 0 0 12px; }
+  .muted { color: var(--text-muted); font-size: 0.92rem; }
+  label { display: block; font-size: 0.9rem; color: var(--text-muted); margin-bottom: 6px; margin-top: 16px; }
+  textarea#paste-input {
+    width: 100%;
+    min-height: 160px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.82rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    color: var(--text);
+    background: #fbfbfa;
+    resize: vertical;
+  }
+  textarea#paste-input:focus { outline: none; border-color: var(--accent); }
+  input[type="file"] {
+    width: 100%;
+    padding: 10px;
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    font-size: 0.9rem;
+    background: #fbfbfa;
+  }
+  .btn-row { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+  button {
+    font-family: inherit;
+    font-size: 0.95rem;
+    padding: 12px 18px;
+    border-radius: 8px;
+    border: 1px solid var(--accent);
+    background: var(--accent);
+    color: #fff;
+    cursor: pointer;
+    min-height: 44px;
+    flex: 1 1 auto;
+  }
+  button.secondary {
+    background: var(--surface);
+    color: var(--accent-dark);
+    border: 1px solid var(--border);
+  }
+  button:active { transform: translateY(1px); }
+  .results-meta { font-weight: 600; margin: 4px 0 2px; }
+  .legend {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    margin: 0 0 16px;
+  }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+  .legend-dot.zone-green { background: #4c9a4c; }
+  .legend-dot.zone-yellow { background: #caa528; }
+  .legend-dot.zone-red { background: #c0433a; }
+  .scale-card {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+  }
+  .scale-card.zone-green { background: #dff2df; border-color: #9bc99b; }
+  .scale-card.zone-yellow { background: #fdf3c7; border-color: #e3cf6a; }
+  .scale-card.zone-red { background: #f7d6d3; border-color: #dd9d97; }
+  .scale-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .scale-name { font-weight: 600; }
+  .scale-score { font-variant-numeric: tabular-nums; color: var(--accent-dark); font-weight: 600; }
+  .scale-ref { font-size: 0.78rem; color: var(--text-muted); margin-top: 2px; }
+  .zone-badge {
+    font-size: 0.76rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 999px;
+    white-space: nowrap;
+    display: inline-block;
+    margin-top: 8px;
+  }
+  .zone-green .zone-badge { background: #4c9a4c; color: #fff; }
+  .zone-yellow .zone-badge { background: #caa528; color: #fff; }
+  .zone-red .zone-badge { background: #c0433a; color: #fff; }
+  .error-box {
+    border: 1px solid #dd9d97;
+    background: #f7d6d3;
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-size: 0.9rem;
+    margin-top: 14px;
+  }
+  #results-section { display: none; }
+  .print-table {
+    display: none;
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+  }
+  .print-table th, .print-table td {
+    border: 1px solid #555;
+    padding: 3px 6px;
+    font-size: 11px;
+    line-height: 1.25;
+  }
+  .print-table th {
+    background: #fff2ae;
+    font-weight: 700;
+    text-align: center;
+  }
+  .print-table td:first-child, .print-table th:first-child { width: 22px; text-align: center; }
+  .print-table td:nth-child(2), .print-table th:nth-child(2) { width: 44px; text-align: center; font-weight: 700; }
+  .print-table td:nth-child(4), .print-table th:nth-child(4),
+  .print-table td:nth-child(5), .print-table th:nth-child(5) { width: 62px; text-align: right; font-variant-numeric: tabular-nums; }
+  .print-table tr.zone-green td { background: #93c47d; }
+  .print-table tr.zone-yellow td { background: #ffe599; }
+  .print-table tr.zone-red td { background: #e06666; }
+  @media print {
+    .no-print { display: none !important; }
+    body { background: #fff; }
+    .card { border: none; margin: 0; padding: 0; max-width: 100%; }
+    #results-section h2,
+    #results-section > p.muted,
+    .legend,
+    #scales-container { display: none !important; }
+    .print-table { display: table !important; }
+  }
+  @media (max-width: 480px) {
+    .card { padding: 22px 16px; }
+    .btn-row { flex-direction: column; }
+    .btn-row button { width: 100%; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="card">
+    <div class="no-print">
+      <h1>SMI — визуализация результатов клиента</h1>
+      <p class="muted">Вставьте сюда текст, который прислал клиент (кнопка «Скопировать результаты для психолога» или содержимое скачанного файла .txt), — ниже появится тот же цветовой «светофор» по шкалам.</p>
+
+      <label for="file-input">Вариант 1. Выбрать присланный файл .txt</label>
+      <input type="file" id="file-input" accept=".txt,text/plain">
+
+      <label for="paste-input">Вариант 2. Вставить текст (Cmd+V / Ctrl+V) — разбор произойдёт автоматически</label>
+      <textarea id="paste-input" placeholder="Результаты опросника SMI (Schema Mode Inventory)&#10;Имя: ...&#10;..."></textarea>
+
+      <div class="btn-row">
+        <button id="btn-clipboard">Вставить из буфера обмена</button>
+        <button class="secondary" id="btn-parse">Показать результаты</button>
+      </div>
+      <div class="btn-row">
+        <button class="secondary" id="btn-clear">Очистить</button>
+        <button class="secondary" id="btn-print">Сохранить/распечатать как PDF</button>
+      </div>
+      <div id="error-container"></div>
+    </div>
+
+    <div id="results-section">
+      <h2>Результаты</h2>
+      <div class="results-meta" id="results-meta"></div>
+      <p class="muted">Средний балл по каждой шкале (1–6). Зелёный — близко к норме, жёлтый — между «ось1» и «ось2», красный — за пределами «ось2». Официальных пороговых значений у методики нет — это не диагноз.</p>
+      <div class="legend">
+        <div class="legend-item"><span class="legend-dot zone-green"></span>близко к норме</div>
+        <div class="legend-item"><span class="legend-dot zone-yellow"></span>умеренное отклонение</div>
+        <div class="legend-item"><span class="legend-dot zone-red"></span>значительное отклонение</div>
+      </div>
+      <div id="scales-container"></div>
+      <table class="print-table" id="print-table">
+        <thead>
+          <tr><th>№</th><th></th><th>Часть</th><th>Показатель</th><th>Норма</th></tr>
+        </thead>
+        <tbody id="print-table-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  function $(id) { return document.getElementById(id); }
+
+  var ZONE_LABELS = { green: 'Близко к норме', yellow: 'Умеренное отклонение', red: 'Значительное отклонение' };
+
+  function classifyZone(score, norm, axis1, axis2) {
+    var diff = Math.abs(score - norm);
+    var toAxis1 = Math.abs(axis1 - norm);
+    var toAxis2 = Math.abs(axis2 - norm);
+    if (diff <= toAxis1) return 'green';
+    if (diff <= toAxis2) return 'yellow';
+    return 'red';
+  }
+
+  function num(str) {
+    return Number(String(str).replace(',', '.'));
+  }
+
+  // Reference norm/ось1/ось2 for older exports that only saved the score
+  // (before the traffic-light version added these values to the report text).
+  var REFERENCE = {
+    'РР': { norm: 1.47, axis1: 2.66, axis2: 3.36 },
+    'ЗР': { norm: 1.81, axis1: 2.56, axis2: 3.09 },
+    'ЯР': { norm: 1.2, axis1: 1.55, axis2: 2.05 },
+    'ИР': { norm: 2.15, axis1: 2.46, axis2: 3.05 },
+    'НР': { norm: 2.27, axis1: 2.57, axis2: 2.95 },
+    'СР': { norm: 4.52, axis1: 3.39, axis2: 2.88 },
+    'УПЧ': { norm: 2.51, axis1: 3.0, axis2: 3.32 },
+    'ОЗЧ': { norm: 1.59, axis1: 2.35, axis2: 2.95 },
+    'ОСЧ': { norm: 1.93, axis1: 3.0, axis2: 3.32 },
+    'СВЧ': { norm: 2.31, axis1: 2.47, axis2: 2.63 },
+    'АНЧ': { norm: 1.72, axis1: 1.91, axis2: 2.21 },
+    'КРЧ': { norm: 1.47, axis1: 2.16, axis2: 2.75 },
+    'ТРЧ': { norm: 3.06, axis1: 3.5, axis2: 3.71 },
+    'ЗВЧ': { norm: 4.6, axis1: 3.99, axis2: 3.6 }
+  };
+
+  // Full scale definitions (with item->question mappings), used to recompute scores
+  // when only the raw per-question answers are pasted (no scale summary at all).
+  var SCALE_DEFS = [
+    { code: 'РР', name: 'Раненный ребёнок', items: [4, 6, 34, 48, 63, 67, 101, 102, 106, 113], norm: 1.47, axis1: 2.66, axis2: 3.36 },
+    { code: 'ЗР', name: 'Злой ребёнок', items: [22, 40, 45, 47, 53, 59, 72, 75, 99, 105], norm: 1.81, axis1: 2.56, axis2: 3.09 },
+    { code: 'ЯР', name: 'Яростный ребёнок', items: [14, 24, 25, 44, 51, 88, 94, 97, 117], norm: 1.2, axis1: 1.55, axis2: 2.05 },
+    { code: 'ИР', name: 'Импульсивный ребёнок', items: [12, 15, 33, 38, 62, 65, 74, 93], norm: 2.15, axis1: 2.46, axis2: 3.05 },
+    { code: 'НР', name: 'Недисциплинированный ребёнок', items: [13, 21, 61, 66, 103], norm: 2.27, axis1: 2.57, axis2: 2.95 },
+    { code: 'СР', name: 'Счастливый ребёнок', items: [2, 17, 19, 46, 57, 64, 91, 92, 108, 116], norm: 4.52, axis1: 3.39, axis2: 2.88 },
+    { code: 'УПЧ', name: 'Уступчиво-покорная часть', items: [8, 18, 35, 36, 52, 96, 104], norm: 2.51, axis1: 3.0, axis2: 3.32 },
+    { code: 'ОЗЧ', name: 'Отстранённо-защитная часть', items: [27, 31, 32, 37, 41, 56, 60, 71, 84], norm: 1.59, axis1: 2.35, axis2: 2.95 },
+    { code: 'ОСЧ', name: 'Отстранённо-самоуспокаивающая часть', items: [39, 49, 54, 82], norm: 1.93, axis1: 3.0, axis2: 3.32 },
+    { code: 'СВЧ', name: 'Самовозвеличивающая часть', items: [10, 11, 26, 29, 42, 70, 77, 85, 87, 109], norm: 2.31, axis1: 2.47, axis2: 2.63 },
+    { code: 'АНЧ', name: 'Агрессивно-нападающая часть', items: [1, 23, 30, 50, 73, 89, 95, 98, 107], norm: 1.72, axis1: 1.91, axis2: 2.21 },
+    { code: 'КРЧ', name: 'Карающая родительская часть', items: [3, 5, 9, 16, 55, 68, 80, 83, 90, 112], norm: 1.47, axis1: 2.16, axis2: 2.75 },
+    { code: 'ТРЧ', name: 'Требовательная родительская часть', items: [7, 43, 78, 79, 86, 100, 110], norm: 3.06, axis1: 3.5, axis2: 3.71 },
+    { code: 'ЗВЧ', name: 'Здоровая взрослая часть', items: [20, 28, 58, 69, 76, 81, 111, 114, 115, 118], norm: 4.6, axis1: 3.99, axis2: 3.6 }
+  ];
+
+  function parseReport(text) {
+    var meta = {};
+    var nameMatch = text.match(/Имя:\s*(.+)/);
+    var ageMatch = text.match(/Возраст:\s*(.+)/);
+    var dateMatch = text.match(/Дата заполнения:\s*(.+)/);
+    if (nameMatch) meta.name = nameMatch[1].trim();
+    if (ageMatch) meta.age = ageMatch[1].trim();
+    if (dateMatch) meta.date = dateMatch[1].trim();
+
+    var scales = [];
+    var seenCodes = {};
+
+    // Current format: "Имя шкалы (КОД): 5.20/6  [норма 1.47 · ось1 2.66 · ось2 3.36] — метка"
+    var newRe = /^(.+?)\s*\(([^()]+)\):\s*([\d.,]+)\s*\/\s*6\s*\[норма\s*([\d.,]+)\s*·\s*ось1\s*([\d.,]+)\s*·\s*ось2\s*([\d.,]+)\]/gmu;
+    var m;
+    while ((m = newRe.exec(text)) !== null) {
+      var score = num(m[3]), norm = num(m[4]), axis1 = num(m[5]), axis2 = num(m[6]);
+      var code = m[2].trim();
+      scales.push({
+        name: m[1].trim(), code: code, score: score,
+        norm: norm, axis1: axis1, axis2: axis2,
+        zone: classifyZone(score, norm, axis1, axis2)
+      });
+      seenCodes[code] = true;
+    }
+
+    // Older format (before the traffic-light update): "Имя шкалы (КОД): 2.60/6 — выше нормы"
+    // No норма/ось1/ось2 in the text itself, so fall back to the reference table by code.
+    var oldRe = /^(.+?)\s*\(([^()]+)\):\s*([\d.,]+)\s*\/\s*6\s*[—-]\s*\S/gmu;
+    while ((m = oldRe.exec(text)) !== null) {
+      var oldCode = m[2].trim();
+      if (seenCodes[oldCode]) continue;
+      var ref = REFERENCE[oldCode];
+      if (!ref) continue;
+      var oldScore = num(m[3]);
+      scales.push({
+        name: m[1].trim(), code: oldCode, score: oldScore,
+        norm: ref.norm, axis1: ref.axis1, axis2: ref.axis2,
+        zone: classifyZone(oldScore, ref.norm, ref.axis1, ref.axis2)
+      });
+      seenCodes[oldCode] = true;
+    }
+
+    var lines = text.split(/\r?\n/);
+
+    // Table format pasted straight from a spreadsheet: №<TAB>КОД<TAB>Название<TAB>показатель<TAB>норма<TAB>ось1<TAB>ось2
+    lines.forEach(function (line) {
+      var parts = line.split('\t').map(function (p) { return p.trim(); }).filter(function (p) { return p.length > 0; });
+      if (parts.length !== 7) return;
+      var code = parts[1];
+      if (seenCodes[code]) return;
+      if (!/^\d+$/.test(parts[0])) return;
+      if (!/^[A-ZА-ЯЁ]{2,5}$/iu.test(code)) return;
+      var score = num(parts[3]), norm = num(parts[4]), axis1 = num(parts[5]), axis2 = num(parts[6]);
+      if ([score, norm, axis1, axis2].some(function (v) { return isNaN(v); })) return;
+      scales.push({
+        name: parts[2], code: code, score: score,
+        norm: norm, axis1: axis1, axis2: axis2,
+        zone: classifyZone(score, norm, axis1, axis2)
+      });
+      seenCodes[code] = true;
+    });
+
+    // Raw per-question answers only ("номер вопроса <tab/space> ответ 1-6", one per line) —
+    // no scale summary at all, so recompute scale averages ourselves from SCALE_DEFS.
+    if (scales.length === 0) {
+      var answers = {};
+      lines.forEach(function (line) {
+        var parts = line.trim().split(/[\t ]+/).filter(function (p) { return p.length > 0; });
+        if (parts.length !== 2) return;
+        var qn = parseInt(parts[0], 10);
+        var val = parseInt(parts[1], 10);
+        if (!qn || qn < 1 || qn > 118) return;
+        if (isNaN(val) || val < 1 || val > 6) return;
+        answers[qn] = val;
+      });
+      if (Object.keys(answers).length > 0) {
+        SCALE_DEFS.forEach(function (def) {
+          var sum = 0, count = 0;
+          def.items.forEach(function (qn) {
+            if (answers[qn] !== undefined) { sum += answers[qn]; count++; }
+          });
+          if (count === 0) return;
+          var score = sum / count;
+          scales.push({
+            name: def.name, code: def.code, score: score,
+            norm: def.norm, axis1: def.axis1, axis2: def.axis2,
+            zone: classifyZone(score, def.norm, def.axis1, def.axis2)
+          });
+        });
+      }
+    }
+
+    return { meta: meta, scales: scales };
+  }
+
+  function showError(msg) {
+    $('error-container').innerHTML = '<div class="error-box">' + msg + '</div>';
+    $('results-section').style.display = 'none';
+  }
+
+  function clearError() {
+    $('error-container').innerHTML = '';
+  }
+
+  function render(text) {
+    if (!text || !text.trim()) {
+      clearError();
+      $('results-section').style.display = 'none';
+      return;
+    }
+    var parsed = parseReport(text);
+    if (parsed.scales.length === 0) {
+      showError('Не удалось найти итоговые баллы по шкалам в этом тексте. Проверьте, что вставлен полный текст результатов (тот, что получен через кнопку «Скопировать результаты для психолога» или скачанный файл .txt).');
+      return;
+    }
+    clearError();
+
+    var metaParts = [];
+    if (parsed.meta.name) metaParts.push(parsed.meta.name);
+    if (parsed.meta.age) metaParts.push('возраст ' + parsed.meta.age);
+    if (parsed.meta.date) metaParts.push(parsed.meta.date);
+    $('results-meta').textContent = metaParts.join(' · ');
+
+    var container = $('scales-container');
+    container.innerHTML = '';
+    parsed.scales.forEach(function (s) {
+      var el = document.createElement('div');
+      el.className = 'scale-card zone-' + s.zone;
+      el.innerHTML =
+        '<div class="scale-head"><span class="scale-name">' + s.name + ' (' + s.code + ')</span>' +
+        '<span class="scale-score">' + s.score.toFixed(2) + ' / 6</span></div>' +
+        '<div class="scale-ref">норма ' + s.norm.toFixed(2) + ' · ось1 ' + s.axis1.toFixed(2) + ' · ось2 ' + s.axis2.toFixed(2) + '</div>' +
+        '<span class="zone-badge">' + ZONE_LABELS[s.zone] + '</span>';
+      container.appendChild(el);
+    });
+
+    var tbody = $('print-table-body');
+    tbody.innerHTML = '';
+    parsed.scales.forEach(function (s, i) {
+      var row = document.createElement('tr');
+      row.className = 'zone-' + s.zone;
+      row.innerHTML =
+        '<td>' + (i + 1) + '</td>' +
+        '<td>' + s.code + '</td>' +
+        '<td>' + s.name + '</td>' +
+        '<td>' + s.score.toFixed(2) + '</td>' +
+        '<td>' + s.norm.toFixed(2) + '</td>';
+      tbody.appendChild(row);
+    });
+
+    $('results-section').style.display = 'block';
+  }
+
+  var debounceTimer = null;
+  $('paste-input').addEventListener('input', function () {
+    clearTimeout(debounceTimer);
+    var text = this.value;
+    debounceTimer = setTimeout(function () { render(text); }, 200);
+  });
+
+  $('btn-parse').addEventListener('click', function () {
+    render($('paste-input').value);
+  });
+
+  $('btn-clear').addEventListener('click', function () {
+    $('paste-input').value = '';
+    $('file-input').value = '';
+    clearError();
+    $('results-section').style.display = 'none';
+  });
+
+  $('btn-print').addEventListener('click', function () {
+    window.print();
+  });
+
+  $('btn-clipboard').addEventListener('click', function () {
+    if (navigator.clipboard && navigator.clipboard.readText) {
+      navigator.clipboard.readText().then(function (text) {
+        $('paste-input').value = text;
+        render(text);
+      }).catch(function () {
+        showError('Не удалось прочитать буфер обмена автоматически (браузер запретил доступ). Вставьте текст в поле вручную (Cmd+V / Ctrl+V).');
+      });
+    } else {
+      showError('Ваш браузер не поддерживает автоматическое чтение буфера обмена. Вставьте текст в поле вручную (Cmd+V / Ctrl+V).');
+    }
+  });
+
+  $('file-input').addEventListener('change', function (e) {
+    var file = e.target.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function (evt) {
+      var text = evt.target.result;
+      $('paste-input').value = text;
+      render(text);
+    };
+    reader.onerror = function () {
+      showError('Не удалось прочитать файл. Попробуйте открыть его и скопировать текст вручную.');
+    };
+    reader.readAsText(file, 'utf-8');
+  });
+})();
+</script>
+</body>
+</html>
