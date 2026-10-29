@@ -284,53 +284,76 @@
     { code: 'ЗВЧ', name: 'Здоровая взрослая часть', items: [20, 28, 58, 69, 76, 81, 111, 114, 115, 118], norm: 4.6, axis1: 3.99, axis2: 3.6 }
   ];
 
+  function buildScale(def, score) {
+    return {
+      name: def.name, code: def.code, score: score,
+      norm: def.norm, axis1: def.axis1, axis2: def.axis2,
+      zone: classifyZone(score, def.norm, def.axis1, def.axis2)
+    };
+  }
+
+  // Answers live between "Ответы по вопросам" and "Итоговые баллы" (whole text if no headings).
+  function extractAnswers(text) {
+    var start = text.search(/Ответы по вопросам/);
+    var hasSection = start >= 0;
+    var section = hasSection ? text.slice(start).replace(/^Ответы по вопросам:?/, '') : text;
+    var end = section.search(/Итоговые баллы/);
+    if (end >= 0) section = section.slice(0, end);
+
+    // Bare list of exactly 118 digits 1-6 (column or one line), only inside the answers
+    // section or when the whole text is nothing but digits and separators.
+    if (hasSection || /^[\s\d,;]*$/.test(text)) {
+      var tokens = section.split(/[\s,;]+/).filter(function (t) { return t.length > 0; });
+      if (tokens.length === 118 && tokens.every(function (t) { return /^[1-6]$/.test(t); })) {
+        var bare = {};
+        tokens.forEach(function (t, i) { bare[i + 1] = Number(t); });
+        return bare;
+      }
+    }
+
+    // Numbered: "1. 2", "1 2", "1) 2", "1: 2" (also several pairs on one line).
+    // The lookarounds keep scores such as "4.10" or "4,10" from being read as pairs.
+    var answers = {};
+    var re = /(?:^|[^\d.,])(\d{1,3})[ \t]*[.):]?[ \t]+([1-6])(?![\d.,])/g;
+    var m;
+    while ((m = re.exec(section)) !== null) {
+      var qn = Number(m[1]);
+      if (qn >= 1 && qn <= 118) answers[qn] = Number(m[2]);
+    }
+    return answers;
+  }
+
   function parseReport(text) {
     var meta = {};
-    var nameMatch = text.match(/Имя:\s*(.+)/);
-    var ageMatch = text.match(/Возраст:\s*(.+)/);
-    var dateMatch = text.match(/Дата заполнения:\s*(.+)/);
+    var warnings = [];
+    var nameMatch = text.match(/Имя:\s*(.+?)(?=\s*Возраст:|\s*Дата заполнения:|\r?\n|$)/);
+    var ageMatch = text.match(/Возраст:\s*(\d+)/);
+    var dateMatch = text.match(/Дата заполнения:\s*(\d[\d.]*)/);
     if (nameMatch) meta.name = nameMatch[1].trim();
-    if (ageMatch) meta.age = ageMatch[1].trim();
-    if (dateMatch) meta.date = dateMatch[1].trim();
+    if (ageMatch) meta.age = ageMatch[1];
+    if (dateMatch) meta.date = dateMatch[1].replace(/\.+$/, '');
 
     var scales = [];
     var seenCodes = {};
+    var sent = {};
+    var defByCode = {};
+    SCALE_DEFS.forEach(function (d) { defByCode[d.code] = d; });
 
-    // Current format: "Имя шкалы (КОД): 5.20/6  [норма 1.47 · ось1 2.66 · ось2 3.36] — метка"
-    var newRe = /^(.+?)\s*\(([^()]+)\):\s*([\d.,]+)\s*\/\s*6\s*\[норма\s*([\d.,]+)\s*·\s*ось1\s*([\d.,]+)\s*·\s*ось2\s*([\d.,]+)\]/gmu;
+    // "(КОД): 4.10/6" anywhere in the text (not tied to line start). Works for both
+    // the current format with norms and the older "— выше нормы" one; norms come from SCALE_DEFS.
+    var scaleRe = /\(([^()\s]+)\)\s*:\s*(\d+(?:[.,]\d+)?)\s*\/\s*6/gu;
     var m;
-    while ((m = newRe.exec(text)) !== null) {
-      var score = num(m[3]), norm = num(m[4]), axis1 = num(m[5]), axis2 = num(m[6]);
-      var code = m[2].trim();
-      scales.push({
-        name: m[1].trim(), code: code, score: score,
-        norm: norm, axis1: axis1, axis2: axis2,
-        zone: classifyZone(score, norm, axis1, axis2)
-      });
-      seenCodes[code] = true;
+    while ((m = scaleRe.exec(text)) !== null) {
+      var def = defByCode[m[1]];
+      if (!def || seenCodes[def.code]) continue;
+      var score = num(m[2]);
+      scales.push(buildScale(def, score));
+      seenCodes[def.code] = true;
+      sent[def.code] = score;
     }
-
-    // Older format (before the traffic-light update): "Имя шкалы (КОД): 2.60/6 — выше нормы"
-    // No норма/ось1/ось2 in the text itself, so fall back to the reference table by code.
-    var oldRe = /^(.+?)\s*\(([^()]+)\):\s*([\d.,]+)\s*\/\s*6\s*[—-]\s*\S/gmu;
-    while ((m = oldRe.exec(text)) !== null) {
-      var oldCode = m[2].trim();
-      if (seenCodes[oldCode]) continue;
-      var ref = REFERENCE[oldCode];
-      if (!ref) continue;
-      var oldScore = num(m[3]);
-      scales.push({
-        name: m[1].trim(), code: oldCode, score: oldScore,
-        norm: ref.norm, axis1: ref.axis1, axis2: ref.axis2,
-        zone: classifyZone(oldScore, ref.norm, ref.axis1, ref.axis2)
-      });
-      seenCodes[oldCode] = true;
-    }
-
-    var lines = text.split(/\r?\n/);
 
     // Table format pasted straight from a spreadsheet: №<TAB>КОД<TAB>Название<TAB>показатель<TAB>норма<TAB>ось1<TAB>ось2
-    lines.forEach(function (line) {
+    text.split(/\r?\n/).forEach(function (line) {
       var parts = line.split('\t').map(function (p) { return p.trim(); }).filter(function (p) { return p.length > 0; });
       if (parts.length !== 7) return;
       var code = parts[1];
@@ -345,39 +368,32 @@
         zone: classifyZone(score, norm, axis1, axis2)
       });
       seenCodes[code] = true;
+      sent[code] = score;
     });
 
-    // Raw per-question answers only ("номер вопроса <tab/space> ответ 1-6", one per line) —
-    // no scale summary at all, so recompute scale averages ourselves from SCALE_DEFS.
-    if (scales.length === 0) {
-      var answers = {};
-      lines.forEach(function (line) {
-        var parts = line.trim().split(/[\t ]+/).filter(function (p) { return p.length > 0; });
-        if (parts.length !== 2) return;
-        var qn = parseInt(parts[0], 10);
-        var val = parseInt(parts[1], 10);
-        if (!qn || qn < 1 || qn > 118) return;
-        if (isNaN(val) || val < 1 || val > 6) return;
-        answers[qn] = val;
+    var answers = extractAnswers(text);
+    if (Object.keys(answers).length === 118) {
+      // Full set of answers: recompute every scale from SCALE_DEFS.
+      var recomputed = [];
+      var mismatched = [];
+      SCALE_DEFS.forEach(function (d) {
+        var sum = 0;
+        d.items.forEach(function (qn) { sum += answers[qn]; });
+        var sc = sum / d.items.length;
+        recomputed.push(buildScale(d, sc));
+        if (sent[d.code] !== undefined && Math.abs(sent[d.code] - sc) > 0.01) {
+          mismatched.push(d.code + ' (в тексте ' + sent[d.code].toFixed(2) + ', по ответам ' + sc.toFixed(2) + ')');
+        }
       });
-      if (Object.keys(answers).length > 0) {
-        SCALE_DEFS.forEach(function (def) {
-          var sum = 0, count = 0;
-          def.items.forEach(function (qn) {
-            if (answers[qn] !== undefined) { sum += answers[qn]; count++; }
-          });
-          if (count === 0) return;
-          var score = sum / count;
-          scales.push({
-            name: def.name, code: def.code, score: score,
-            norm: def.norm, axis1: def.axis1, axis2: def.axis2,
-            zone: classifyZone(score, def.norm, def.axis1, def.axis2)
-          });
-        });
+      scales = recomputed;
+      if (mismatched.length) {
+        warnings.push('Присланные итоговые баллы расходятся с пересчётом по ответам: ' + mismatched.join(', ') + '. Показаны пересчитанные значения.');
       }
+    } else if (scales.length < 14) {
+      warnings.push('Найдено шкал: ' + scales.length + ' из 14, похоже, текст скопирован не полностью.');
     }
 
-    return { meta: meta, scales: scales };
+    return { meta: meta, scales: scales, warnings: warnings };
   }
 
   function showError(msg) {
@@ -400,7 +416,13 @@
       showError('Не удалось найти итоговые баллы по шкалам в этом тексте. Проверьте, что вставлен полный текст результатов (тот, что получен через кнопку «Скопировать результаты для психолога» или скачанный файл .txt).');
       return;
     }
-    clearError();
+    if (parsed.warnings.length) {
+      $('error-container').innerHTML = parsed.warnings.map(function (w) {
+        return '<div class="error-box">' + w + '</div>';
+      }).join('');
+    } else {
+      clearError();
+    }
 
     var metaParts = [];
     if (parsed.meta.name) metaParts.push(parsed.meta.name);

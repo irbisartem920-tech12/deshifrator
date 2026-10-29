@@ -261,28 +261,35 @@
     var text = (raw || '').trim();
     var name = '', age = '';
 
-    var nameMatch = text.match(/Имя:\s*(.+)/);
+    var nameMatch = text.match(/Имя:\s*(.+?)(?=\s*Возраст:|\s*Дата (?:заполнения|расчёта):|\r?\n|$)/);
     if (nameMatch) name = nameMatch[1].trim();
     var ageMatch = text.match(/Возраст:\s*(\d+)/);
     if (ageMatch) age = ageMatch[1].trim();
 
     if (/Ответы по вопросам/.test(text)) {
-      // Take only the answers list itself — it ends at the first blank line,
-      // before the "Итоговые баллы по шкалам" section. Without this cut, scale
+      // Take only the answers list itself: it ends at "Итоговые баллы" (a blank line can
+      // be lost when the text is forwarded through a messenger). Without this cut, scale
       // averages like "3.50/6" get misread as "вопрос 3 = 5".
-      var section = (text.split(/Ответы по вопросам:?/)[1] || '').split(/\n[ \t]*\n/)[0];
-      var re = /(\d{1,3})\.\s*([1-6])(?![\d.,])/g;
-      var m;
-      while ((m = re.exec(section)) !== null) {
-        var qnum = Number(m[1]);
-        if (qnum >= 1 && qnum <= TOTAL) {
-          answers[qnum] = Number(m[2]);
+      var section = (text.split(/Ответы по вопросам:?/)[1] || '').split(/Итоговые баллы/)[0];
+      // Numbering can be stripped by a messenger, leaving a bare list of exactly TOTAL digits.
+      var tokens = section.split(/[\s,;]+/).filter(function (t) { return t.length > 0; });
+      if (tokens.length === TOTAL && tokens.every(function (t) { return /^[1-6]$/.test(t); })) {
+        for (var i = 0; i < TOTAL; i++) answers[i + 1] = Number(tokens[i]);
+      } else {
+        // "1. 2", "1 2", "1) 2", "1: 2"
+        var re = /(?:^|[^\d.,])(\d{1,3})[ \t]*[.):]?[ \t]+([1-6])(?![\d.,])/g;
+        var m;
+        while ((m = re.exec(section)) !== null) {
+          var qnum = Number(m[1]);
+          if (qnum >= 1 && qnum <= TOTAL) {
+            answers[qnum] = Number(m[2]);
+          }
         }
       }
     } else {
-      var tokens = text.split(/[\s,;]+/).filter(function (t) { return /^[1-6]$/.test(t); });
-      for (var i = 0; i < tokens.length && i < TOTAL; i++) {
-        answers[i + 1] = Number(tokens[i]);
+      var tokens2 = text.split(/[\s,;]+/).filter(function (t) { return /^[1-6]$/.test(t); });
+      for (var j = 0; j < tokens2.length && j < TOTAL; j++) {
+        answers[j + 1] = Number(tokens2[j]);
       }
     }
 
